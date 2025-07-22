@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Electronics Circuit Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.5/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const Simulator = () => {
+            const [params, setParams] = useState({
+                vin: 24,
+                dutyCycle: 0.5,
+                inductance: 100,
+                capacitance: 100,
+                resistance: 10,
+                frequency: 25
+            });
+            const [waveforms, setWaveforms] = useState({ time: [], voltage: [], current: [] });
+            const voltageChartRef = useRef(null);
+            const currentChartRef = useRef(null);
+
+            const updateParam = (key, value) => {
+                setParams(prev => ({ ...prev, [key]: parseFloat(value) }));
+            };
+
+            const simulate = async () => {
+                try {
+                    const response = await fetch('http://localhost:5000/simulate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(params)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error);
+                    setWaveforms(data);
+                } catch (error) {
+                    console.error('Simulation error:', error.message);
+                    alert('Failed to simulate: ' + error.message);
+                }
+            };
+
+            useEffect(() => {
+                if (voltageChartRef.current) voltageChartRef.current.destroy();
+                if (currentChartRef.current) currentChartRef.current.destroy();
+
+                voltageChartRef.current = new Chart(document.getElementById('voltageChart'), {
+                    type: 'line',
+                    data: {
+                        labels: waveforms.time,
+                        datasets: [{ label: 'Output Voltage (V)', data: waveforms.voltage, borderColor: '#3b82f6', tension: 0.1, pointRadius: 0 }]
+                    },
+                    options: { responsive: true, scales: { x: { title: { display: true, text: 'Time (ms)' } }, y: { title: { display: true, text: 'Voltage (V)' } } } }
+                });
+
+                currentChartRef.current = new Chart(document.getElementById('currentChart'), {
+                    type: 'line',
+                    data: {
+                        labels: waveforms.time,
+                        datasets: [{ label: 'Output Current (A)', data: waveforms.current, borderColor: '#ef4444', tension: 0.1, pointRadius: 0 }]
+                    },
+                    options: { responsive: true, scales: { x: { title: { display: true, text: 'Time (ms)' } }, y: { title: { display: true, text: 'Current (A)' } } } }
+                });
+
+                return () => {
+                    if (voltageChartRef.current) voltageChartRef.current.destroy();
+                    if (currentChartRef.current) currentChartRef.current.destroy();
+                };
+            }, [waveforms]);
+
+            useEffect(() => { simulate(); }, []);
+
+            return (
+                <div className="container mx-auto p-4">
+                    <h1 className="text-2xl font-bold mb-4">DC-DC Buck Converter Simulator</h1>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label className="block mb-1">Input Voltage (V):</label>
+                            <input type="number" value={params.vin} onChange={e => updateParam('vin', e.target.value)} className="w-full p-2 border rounded" step="0.1" />
+                        </div>
+                        <div>
+                            <label className="block mb-1">Duty Cycle (0-1):</label>
+                            <input type="number" value={params.dutyCycle} onChange={e => updateParam('dutyCycle', e.target.value)} className="w-full p-2 border rounded" step="0.01" min="0" max="1" />
+                        </div>
+                        <div>
+                            <label className="block mb-1">Inductance (µH):</label>
+                            <input type="number" value={params.inductance} onChange={e => updateParam('inductance', e.target.value)} className="w-full p-2 border rounded" step="1" />
+                        </div>
+                        <div>
+                            <label className="block mb-1">Capacitance (µF):</label>
+                            <input type="number" value={params.capacitance} onChange={e => updateParam('capacitance', e.target.value)} className="w-full p-2 border rounded" step="1" />
+                        </div>
+                        <div>
+                            <label className="block mb-1">Load Resistance (Ω):</label>
+                            <input type="number" value={params.resistance} onChange={e => updateParam('resistance', e.target.value)} className="w-full p-2 border rounded" step="0.1" />
+                        </div>
+                        <div>
+                            <label className="block mb-1">Switching Frequency (kHz):</label>
+                            <input type="number" value={params.frequency} onChange={e => updateParam('frequency', e.target.value)} className="w-full p-2 border rounded" step="1" />
+                        </div>
+                    </div>
+                    <button onClick={simulate} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Simulate</button>
+                    <div className="mt-4">
+                        <h2 className="text-xl font-semibold">Output Voltage</h2>
+                        <canvas id="voltageChart"></canvas>
+                    </div>
+                    <div className="mt-4">
+                        <h2 className="text-xl font-semibold">Output Current</h2>
+                        <canvas id="currentChart"></canvas>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<Simulator />, document.getElementById('root'));
+    </script>
+</body>
+</html>
